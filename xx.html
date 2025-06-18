@@ -1,0 +1,1069 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>表情包合成软件</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.2/css/all.min.css" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/gif.js@0.2.0/dist/gif.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/canvas2image@1.0.4/canvas2image.min.js"></script>
+    
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        primary: '#165DFF',
+                        secondary: '#FF7D00',
+                        dark: '#1E293B',
+                        light: '#F8FAFC'
+                    },
+                    fontFamily: {
+                        inter: ['Inter', 'sans-serif'],
+                    },
+                }
+            }
+        }
+    </script>
+    <style type="text/tailwindcss">
+        @layer utilities {
+            .content-auto {
+                content-visibility: auto;
+            }
+            .meme-container {
+                position: relative;
+                width: 100%;
+                padding-bottom: 100%;
+                overflow: hidden;
+            }
+            .meme-canvas {
+                position: absolute;
+                top: 0;
+                left: 0;
+                width: 100%;
+                height: 100%;
+                object-fit: contain;
+            }
+            .text-layer {
+                position: absolute;
+                cursor: move;
+                white-space: nowrap;
+                user-select: none;
+                min-width: 50px;
+                min-height: 24px;
+            }
+            .text-handle {
+                position: absolute;
+                bottom: -8px;
+                right: -8px;
+                width: 16px;
+                height: 16px;
+                background-color: #165DFF;
+                border-radius: 50%;
+                cursor: nwse-resize;
+                display: none;
+            }
+            .text-layer:hover .text-handle,
+            .text-layer.selected .text-handle {
+                display: block;
+            }
+            .text-input {
+                position: absolute;
+                top: 0;
+                left: 0;
+                width: 100%;
+                height: 100%;
+                background: transparent;
+                border: none;
+                outline: none;
+                color: inherit;
+                font: inherit;
+                text-align: center;
+                resize: none;
+                padding: 0;
+                overflow: hidden;
+            }
+            .scale-up-center {
+                animation: scale-up-center 0.4s cubic-bezier(0.39, 0.575, 0.565, 1) both;
+            }
+            @keyframes scale-up-center {
+                0% { transform: scale(0.8); opacity: 0; }
+                100% { transform: scale(1); opacity: 1; }
+            }
+            .fade-in {
+                animation: fade-in 0.5s ease-out both;
+            }
+            @keyframes fade-in {
+                0% { opacity: 0; }
+                100% { opacity: 1; }
+            }
+        }
+    </style>
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background: linear-gradient(135deg, #f5f7fa 0%, #e4e6eb 100%);
+            min-height: 100vh;
+        }
+        
+        .app-container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        
+        .panel {
+            background-color: white;
+            border-radius: 12px;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+            padding: 20px;
+            margin-bottom: 20px;
+            transition: all 0.3s ease;
+        }
+        
+        .panel:hover {
+            box-shadow: 0 8px 30px rgba(0, 0, 0, 0.12);
+        }
+        
+        .toolbar {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            margin-bottom: 15px;
+        }
+        
+        .btn {
+            padding: 8px 16px;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
+        }
+        
+        .btn-primary {
+            background-color: #165DFF;
+            color: white;
+        }
+        
+        .btn-primary:hover {
+            background-color: #0E4BDB;
+        }
+        
+        .btn-secondary {
+            background-color: #f0f2f5;
+            color: #333;
+        }
+        
+        .btn-secondary:hover {
+            background-color: #e4e6eb;
+        }
+        
+        .btn-danger {
+            background-color: #FF4D4F;
+            color: white;
+        }
+        
+        .btn-danger:hover {
+            background-color: #F5222D;
+        }
+        
+        .input-group {
+            margin-bottom: 15px;
+        }
+        
+        .input-group label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: 500;
+        }
+        
+        .input-control {
+            width: 100%;
+            padding: 8px 12px;
+            border: 1px solid #d9d9d9;
+            border-radius: 6px;
+            transition: all 0.3s ease;
+        }
+        
+        .input-control:focus {
+            outline: none;
+            border-color: #165DFF;
+            box-shadow: 0 0 0 2px rgba(22, 93, 255, 0.2);
+        }
+        
+        .meme-preview {
+            position: relative;
+            width: 100%;
+            background-color: #f0f2f5;
+            border-radius: 8px;
+            overflow: hidden;
+        }
+        
+        .meme-preview img,
+        .meme-preview canvas {
+            max-width: 100%;
+            max-height: 500px;
+            object-fit: contain;
+        }
+        
+        .text-properties {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+            gap: 10px;
+        }
+        
+        .color-picker {
+            position: relative;
+        }
+        
+        .color-picker input {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            opacity: 0;
+            cursor: pointer;
+        }
+        
+        .color-display {
+            width: 32px;
+            height: 32px;
+            border-radius: 6px;
+            border: 1px solid #d9d9d9;
+        }
+        
+        .progress-bar {
+            height: 4px;
+            background-color: #e4e6eb;
+            border-radius: 2px;
+            overflow: hidden;
+            margin-top: 10px;
+            display: none;
+        }
+        
+        .progress-value {
+            height: 100%;
+            background-color: #165DFF;
+            width: 0%;
+            transition: width 0.3s ease;
+        }
+        
+        @media (min-width: 768px) {
+            .editor-layout {
+                display: grid;
+                grid-template-columns: 1fr 300px;
+                gap: 20px;
+            }
+        }
+        
+        .generated-memes {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+            gap: 15px;
+            margin-top: 20px;
+        }
+        
+        .meme-result {
+            position: relative;
+            border-radius: 8px;
+            overflow: hidden;
+            background-color: white;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05);
+            transition: all 0.3s ease;
+        }
+        
+        .meme-result:hover {
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+            transform: translateY(-2px);
+        }
+        
+        .meme-result img {
+            width: 100%;
+            height: auto;
+            display: block;
+        }
+        
+        .result-actions {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            background: rgba(0, 0, 0, 0.6);
+            padding: 8px;
+            display: flex;
+            justify-content: center;
+            gap: 10px;
+            opacity: 0;
+            transition: opacity 0.3s ease;
+        }
+        
+        .meme-result:hover .result-actions {
+            opacity: 1;
+        }
+        
+        .action-btn {
+            color: white;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+        
+        .action-btn:hover {
+            color: #165DFF;
+        }
+        
+        .toast {
+            position: fixed;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            background-color: #333;
+            color: white;
+            padding: 10px 16px;
+            border-radius: 6px;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+            z-index: 100;
+            opacity: 0;
+            transition: opacity 0.3s ease;
+        }
+        
+        .toast.show {
+            opacity: 1;
+        }
+    </style>
+</head>
+<body>
+    <div class="app-container">
+        <header class="mb-6">
+            <h1 class="text-[clamp(1.8rem,3vw,2.5rem)] font-bold text-center text-dark">表情包合成软件</h1>
+            <p class="text-center text-gray-600 mt-2">上传图片，添加文字，生成属于你的专属表情包！</p>
+        </header>
+        
+        <div class="editor-layout">
+            <!-- 主编辑区域 -->
+            <div class="main-editor">
+                <div class="panel">
+                    <div class="toolbar">
+                        <label class="btn btn-primary">
+                            <i class="fa-solid fa-upload"></i>
+                            <span>上传图片</span>
+                            <input type="file" id="imageUpload" accept="image/*" class="hidden">
+                        </label>
+                        <button id="addTextBtn" class="btn btn-secondary">
+                            <i class="fa-solid fa-font"></i>
+                            <span>添加文字</span>
+                        </button>
+                        <button id="generateGifBtn" class="btn btn-primary">
+                            <i class="fa-solid fa-magic"></i>
+                            <span>生成表情包</span>
+                        </button>
+                    </div>
+                    
+                    <div class="meme-container" id="memeContainer">
+                        <div id="memePreview" class="meme-preview flex justify-center items-center">
+                            <div class="text-center p-10 text-gray-400">
+                                <i class="fa-solid fa-image text-5xl mb-4"></i>
+                                <p>上传图片开始制作表情包</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="panel">
+                    <h3 class="font-bold text-lg mb-4">已生成的表情包</h3>
+                    <div id="generatedMemes" class="generated-memes">
+                        <!-- 生成的表情包将显示在这里 -->
+                    </div>
+                </div>
+            </div>
+            
+            <!-- 右侧控制面板 -->
+            <div class="control-panel">
+                <div class="panel">
+                    <h3 class="font-bold text-lg mb-4">文字属性</h3>
+                    
+                    <div id="textProperties" class="text-properties hidden">
+                        <div class="input-group">
+                            <label>文字内容</label>
+                            <input type="text" id="textContent" class="input-control" placeholder="输入文字...">
+                        </div>
+                        
+                        <div class="input-group">
+                            <label>字体大小</label>
+                            <input type="range" id="fontSize" min="12" max="100" value="36" class="input-control">
+                            <span id="fontSizeValue" class="text-sm text-gray-500">36px</span>
+                        </div>
+                        
+                        <div class="input-group">
+                            <label>字体颜色</label>
+                            <div class="color-picker">
+                                <div id="textColorDisplay" class="color-display" style="background-color: #ffffff;"></div>
+                                <input type="color" id="textColor" value="#ffffff" class="input-control">
+                            </div>
+                        </div>
+                        
+                        <div class="input-group">
+                            <label>文字对齐</label>
+                            <div class="flex gap-2">
+                                <button class="btn btn-secondary text-align-btn" data-align="left">
+                                    <i class="fa-solid fa-align-left"></i>
+                                </button>
+                                <button class="btn btn-secondary text-align-btn active" data-align="center">
+                                    <i class="fa-solid fa-align-center"></i>
+                                </button>
+                                <button class="btn btn-secondary text-align-btn" data-align="right">
+                                    <i class="fa-solid fa-align-right"></i>
+                                </button>
+                            </div>
+                        </div>
+                        
+                        <div class="input-group">
+                            <label>字体粗细</label>
+                            <select id="fontWeight" class="input-control">
+                                <option value="normal">正常</option>
+                                <option value="bold" selected>加粗</option>
+                                <option value="bolder">更粗</option>
+                                <option value="lighter">更细</option>
+                            </select>
+                        </div>
+                        
+                        <div class="input-group">
+                            <label>文字阴影</label>
+                            <div class="flex items-center gap-2">
+                                <input type="checkbox" id="textShadow" class="mr-2">
+                                <span>启用</span>
+                            </div>
+                        </div>
+                        
+                        <div class="input-group">
+                            <label>描边</label>
+                            <div class="flex items-center gap-2">
+                                <input type="checkbox" id="textStroke" class="mr-2">
+                                <span>启用</span>
+                            </div>
+                        </div>
+                        
+                        <button id="deleteTextBtn" class="btn btn-danger w-full mt-4">
+                            <i class="fa-solid fa-trash"></i>
+                            <span>删除文字</span>
+                        </button>
+                    </div>
+                    
+                    <div id="gifOptions" class="text-properties">
+                        <h4 class="font-bold mb-3 mt-4">GIF选项</h4>
+                        
+                        <div class="input-group">
+                            <label>GIF帧数</label>
+                            <input type="number" id="gifFrames" min="2" max="20" value="5" class="input-control">
+                        </div>
+                        
+                        <div class="input-group">
+                            <label>帧延迟 (ms)</label>
+                            <input type="number" id="gifDelay" min="50" max="1000" value="200" class="input-control">
+                        </div>
+                        
+                        <div class="input-group">
+                            <label>动画效果</label>
+                            <select id="animationEffect" class="input-control">
+                                <option value="bounce">弹跳</option>
+                                <option value="fade">淡入淡出</option>
+                                <option value="scale">缩放</option>
+                                <option value="shake">摇晃</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div id="toast" class="toast">操作成功!</div>
+        <div id="progressBar" class="progress-bar">
+            <div id="progressValue" class="progress-value"></div>
+        </div>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            // 全局变量
+            const memeContainer = document.getElementById('memeContainer');
+            const memePreview = document.getElementById('memePreview');
+            const imageUpload = document.getElementById('imageUpload');
+            const addTextBtn = document.getElementById('addTextBtn');
+            const textProperties = document.getElementById('textProperties');
+            const generateGifBtn = document.getElementById('generateGifBtn');
+            const generatedMemes = document.getElementById('generatedMemes');
+            const toast = document.getElementById('toast');
+            const progressBar = document.getElementById('progressBar');
+            const progressValue = document.getElementById('progressValue');
+            
+            let currentImage = null;
+            let currentTextLayer = null;
+            let textLayers = [];
+            let isDragging = false;
+            let offsetX, offsetY;
+            let currentScale = 1;
+            let scaleStep = 0.1;
+            
+            // 上传图片
+            imageUpload.addEventListener('change', (e) => {
+                if (e.target.files && e.target.files[0]) {
+                    const reader = new FileReader();
+                    
+                    reader.onload = (e) => {
+                        // 清除现有内容
+                        memePreview.innerHTML = '';
+                        
+                        // 创建新图片元素
+                        currentImage = new Image();
+                        currentImage.src = e.target.result;
+                        currentImage.className = 'meme-canvas';
+                        currentImage.onload = () => {
+                            showToast('图片上传成功!');
+                        };
+                        
+                        memePreview.appendChild(currentImage);
+                    };
+                    
+                    reader.readAsDataURL(e.target.files[0]);
+                }
+            });
+            
+            // 添加文字
+            addTextBtn.addEventListener('click', () => {
+                if (!currentImage) {
+                    showToast('请先上传图片!');
+                    return;
+                }
+                
+                // 创建新的文字层
+                const textLayer = document.createElement('div');
+                textLayer.className = 'text-layer';
+                textLayer.style.position = 'absolute';
+                textLayer.style.top = '20px';
+                textLayer.style.left = '50%';
+                textLayer.style.transform = 'translateX(-50%)';
+                textLayer.style.fontSize = '36px';
+                textLayer.style.color = '#ffffff';
+                textLayer.style.textAlign = 'center';
+                textLayer.style.fontWeight = 'bold';
+                textLayer.style.textShadow = '0 2px 4px rgba(0,0,0,0.5)';
+                textLayer.style.zIndex = '10';
+                
+                // 添加文字输入框
+                const textInput = document.createElement('div');
+                textInput.className = 'text-input';
+                textInput.contentEditable = true;
+                textInput.textContent = '输入文字';
+                textInput.dataset.placeholder = '输入文字';
+                
+                // 添加调整大小手柄
+                const textHandle = document.createElement('div');
+                textHandle.className = 'text-handle';
+                
+                textLayer.appendChild(textInput);
+                textLayer.appendChild(textHandle);
+                memePreview.appendChild(textLayer);
+                
+                // 添加到文字层数组
+                textLayers.push(textLayer);
+                
+                // 选中新添加的文字层
+                selectTextLayer(textLayer);
+                
+                // 聚焦到文字输入框
+                setTimeout(() => {
+                    textInput.focus();
+                    // 选中所有文字
+                    const range = document.createRange();
+                    range.selectNodeContents(textInput);
+                    const selection = window.getSelection();
+                    selection.removeAllRanges();
+                    selection.addRange(range);
+                }, 100);
+                
+                // 文字层拖动功能
+                setupTextDrag(textLayer);
+                
+                // 文字层调整大小功能
+                setupTextResize(textLayer);
+            });
+            
+            // 设置文字拖动
+            function setupTextDrag(textLayer) {
+                const textInput = textLayer.querySelector('.text-input');
+                
+                textLayer.addEventListener('mousedown', (e) => {
+                    if (e.target === textInput || e.target === textLayer) {
+                        isDragging = true;
+                        selectTextLayer(textLayer);
+                        
+                        const rect = textLayer.getBoundingClientRect();
+                        offsetX = e.clientX - rect.left;
+                        offsetY = e.clientY - rect.top;
+                        
+                        // 提高z-index
+                        textLayer.style.zIndex = '20';
+                        
+                        // 降低其他文字层的z-index
+                        textLayers.forEach(layer => {
+                            if (layer !== textLayer && parseInt(layer.style.zIndex) === 20) {
+                                layer.style.zIndex = '10';
+                            }
+                        });
+                    }
+                });
+            }
+            
+            // 设置文字调整大小
+            function setupTextResize(textLayer) {
+                const handle = textLayer.querySelector('.text-handle');
+                const textInput = textLayer.querySelector('.text-input');
+                
+                handle.addEventListener('mousedown', (e) => {
+                    e.stopPropagation();
+                    isDragging = true;
+                    selectTextLayer(textLayer);
+                    
+                    // 提高z-index
+                    textLayer.style.zIndex = '20';
+                    
+                    // 降低其他文字层的z-index
+                    textLayers.forEach(layer => {
+                        if (layer !== textLayer && parseInt(layer.style.zIndex) === 20) {
+                            layer.style.zIndex = '10';
+                        }
+                    });
+                    
+                    const startX = e.clientX;
+                    const startWidth = textLayer.offsetWidth;
+                    const startFontSize = parseInt(textLayer.style.fontSize);
+                    
+                    const resize = (e) => {
+                        if (isDragging) {
+                            const width = startWidth + (e.clientX - startX);
+                            const newFontSize = Math.max(12, startFontSize + (e.clientX - startX) / 5);
+                            
+                            textLayer.style.width = `${width}px`;
+                            textLayer.style.fontSize = `${newFontSize}px`;
+                            
+                            // 更新字体大小显示
+                            document.getElementById('fontSize').value = newFontSize;
+                            document.getElementById('fontSizeValue').textContent = `${newFontSize}px`;
+                        }
+                    };
+                    
+                    const stopResize = () => {
+                        isDragging = false;
+                        document.removeEventListener('mousemove', resize);
+                        document.removeEventListener('mouseup', stopResize);
+                    };
+                    
+                    document.addEventListener('mousemove', resize);
+                    document.addEventListener('mouseup', stopResize);
+                });
+            }
+            
+            // 选中文字层
+            function selectTextLayer(textLayer) {
+                // 清除之前的选中状态
+                textLayers.forEach(layer => {
+                    layer.classList.remove('selected');
+                });
+                
+                // 设置新的选中状态
+                textLayer.classList.add('selected');
+                currentTextLayer = textLayer;
+                
+                // 显示文字属性面板
+                textProperties.classList.remove('hidden');
+                textProperties.classList.add('scale-up-center');
+                
+                // 填充属性值
+                const textInput = textLayer.querySelector('.text-input');
+                document.getElementById('textContent').value = textInput.textContent;
+                document.getElementById('fontSize').value = parseInt(textLayer.style.fontSize);
+                document.getElementById('fontSizeValue').textContent = `${parseInt(textLayer.style.fontSize)}px`;
+                document.getElementById('textColor').value = rgbToHex(textLayer.style.color);
+                document.getElementById('textColorDisplay').style.backgroundColor = rgbToHex(textLayer.style.color);
+                document.getElementById('fontWeight').value = textLayer.style.fontWeight;
+                document.getElementById('textAlign').value = textLayer.style.textAlign;
+                
+                // 检查文字阴影和描边
+                document.getElementById('textShadow').checked = textLayer.style.textShadow !== '';
+                document.getElementById('textStroke').checked = textLayer.style.webkitTextStrokeWidth !== '';
+            }
+            
+            // 取消选中
+            function deselectAll() {
+                textLayers.forEach(layer => {
+                    layer.classList.remove('selected');
+                });
+                currentTextLayer = null;
+                textProperties.classList.add('hidden');
+            }
+            
+            // 文字内容变更
+            document.getElementById('textContent').addEventListener('input', (e) => {
+                if (currentTextLayer) {
+                    const textInput = currentTextLayer.querySelector('.text-input');
+                    textInput.textContent = e.target.value;
+                }
+            });
+            
+            // 字体大小变更
+            document.getElementById('fontSize').addEventListener('input', (e) => {
+                if (currentTextLayer) {
+                    const fontSize = e.target.value;
+                    currentTextLayer.style.fontSize = `${fontSize}px`;
+                    document.getElementById('fontSizeValue').textContent = `${fontSize}px`;
+                }
+            });
+            
+            // 字体颜色变更
+            document.getElementById('textColor').addEventListener('input', (e) => {
+                if (currentTextLayer) {
+                    const color = e.target.value;
+                    currentTextLayer.style.color = color;
+                    document.getElementById('textColorDisplay').style.backgroundColor = color;
+                }
+            });
+            
+            // 文字对齐方式
+            document.querySelectorAll('.text-align-btn').forEach(btn => {
+                btn.addEventListener('click', (e) => {
+                    if (currentTextLayer) {
+                        const align = e.target.closest('.text-align-btn').dataset.align;
+                        currentTextLayer.style.textAlign = align;
+                        
+                        // 更新按钮状态
+                        document.querySelectorAll('.text-align-btn').forEach(b => {
+                            b.classList.remove('active', 'btn-primary');
+                            b.classList.add('btn-secondary');
+                        });
+                        
+                        e.target.closest('.text-align-btn').classList.add('active', 'btn-primary');
+                        e.target.closest('.text-align-btn').classList.remove('btn-secondary');
+                    }
+                });
+            });
+            
+            // 字体粗细变更
+            document.getElementById('fontWeight').addEventListener('change', (e) => {
+                if (currentTextLayer) {
+                    currentTextLayer.style.fontWeight = e.target.value;
+                }
+            });
+            
+            // 文字阴影变更
+            document.getElementById('textShadow').addEventListener('change', (e) => {
+                if (currentTextLayer) {
+                    if (e.target.checked) {
+                        currentTextLayer.style.textShadow = '0 2px 4px rgba(0,0,0,0.5)';
+                    } else {
+                        currentTextLayer.style.textShadow = '';
+                    }
+                }
+            });
+            
+            // 文字描边变更
+            document.getElementById('textStroke').addEventListener('change', (e) => {
+                if (currentTextLayer) {
+                    if (e.target.checked) {
+                        currentTextLayer.style.webkitTextStrokeWidth = '1px';
+                        currentTextLayer.style.webkitTextStrokeColor = '#000';
+                    } else {
+                        currentTextLayer.style.webkitTextStrokeWidth = '';
+                        currentTextLayer.style.webkitTextStrokeColor = '';
+                    }
+                }
+            });
+            
+            // 删除文字
+            document.getElementById('deleteTextBtn').addEventListener('click', () => {
+                if (currentTextLayer && confirm('确定要删除这个文字吗？')) {
+                    memePreview.removeChild(currentTextLayer);
+                    textLayers = textLayers.filter(layer => layer !== currentTextLayer);
+                    deselectAll();
+                    showToast('文字已删除!');
+                }
+            });
+            
+            // 生成GIF表情包
+            generateGifBtn.addEventListener('click', () => {
+                if (!currentImage) {
+                    showToast('请先上传图片!');
+                    return;
+                }
+                
+                generateGif();
+            });
+            
+            // 生成GIF
+            function generateGif() {
+                // 显示进度条
+                progressBar.style.display = 'block';
+                progressValue.style.width = '0%';
+                
+                const gif = new GIF({
+                    workers: 2,
+                    quality: 10,
+                    width: currentImage.offsetWidth,
+                    height: currentImage.offsetHeight
+                });
+                
+                // 收集GIF选项
+                const frames = parseInt(document.getElementById('gifFrames').value) || 5;
+                const delay = parseInt(document.getElementById('gifDelay').value) || 200;
+                const effect = document.getElementById('animationEffect').value || 'bounce';
+                
+                // 创建Canvas
+                const canvas = document.createElement('canvas');
+                canvas.width = currentImage.offsetWidth;
+                canvas.height = currentImage.offsetHeight;
+                const ctx = canvas.getContext('2d');
+                
+                // 添加帧
+                for (let i = 0; i < frames; i++) {
+                    // 清除Canvas
+                    ctx.clearRect(0, 0, canvas.width, canvas.height);
+                    
+                    // 绘制图片
+                    ctx.drawImage(currentImage, 0, 0, canvas.width, canvas.height);
+                    
+                    // 绘制文字层，应用动画效果
+                    textLayers.forEach(layer => {
+                        const textInput = layer.querySelector('.text-input');
+                        const text = textInput.textContent;
+                        
+                        if (!text || text === textInput.dataset.placeholder) return;
+                        
+                        // 保存当前上下文状态
+                        ctx.save();
+                        
+                        // 应用动画效果
+                        let transform = 1;
+                        let opacity = 1;
+                        
+                        switch (effect) {
+                            case 'bounce':
+                                transform = 1 + 0.1 * Math.sin((i / frames) * Math.PI * 2);
+                                break;
+                            case 'fade':
+                                opacity = 0.5 + 0.5 * Math.sin((i / frames) * Math.PI * 2);
+                                break;
+                            case 'scale':
+                                transform = 0.9 + 0.2 * Math.abs(Math.sin((i / frames) * Math.PI * 2));
+                                break;
+                            case 'shake':
+                                const shakeX = 5 * Math.sin((i / frames) * Math.PI * 10);
+                                const shakeY = 5 * Math.sin((i / frames) * Math.PI * 12);
+                                ctx.translate(shakeX, shakeY);
+                                break;
+                        }
+                        
+                        if (effect !== 'shake') {
+                            ctx.scale(transform, transform);
+                        }
+                        
+                        // 设置文字样式
+                        ctx.font = `${layer.style.fontWeight} ${layer.style.fontSize} ${layer.style.fontFamily || 'sans-serif'}`;
+                        ctx.fillStyle = layer.style.color;
+                        ctx.textAlign = layer.style.textAlign || 'center';
+                        ctx.textBaseline = 'top';
+                        
+                        // 应用文字阴影
+                        if (layer.style.textShadow) {
+                            ctx.shadowColor = 'rgba(0,0,0,0.5)';
+                            ctx.shadowBlur = 4;
+                            ctx.shadowOffsetX = 0;
+                            ctx.shadowOffsetY = 2;
+                        }
+                        
+                        // 应用文字描边
+                        if (layer.style.webkitTextStrokeWidth) {
+                            ctx.strokeStyle = layer.style.webkitTextStrokeColor;
+                            ctx.lineWidth = parseInt(layer.style.webkitTextStrokeWidth);
+                            ctx.strokeText(text, 
+                                (parseInt(layer.style.left) || 0) / transform, 
+                                (parseInt(layer.style.top) || 0) / transform);
+                        }
+                        
+                        // 绘制文字
+                        ctx.fillText(text, 
+                            (parseInt(layer.style.left) || 0) / transform, 
+                            (parseInt(layer.style.top) || 0) / transform);
+                        
+                        // 恢复上下文状态
+                        ctx.restore();
+                    });
+                    
+                    // 添加帧到GIF
+                    gif.addFrame(ctx, { delay: delay });
+                    
+                    // 更新进度
+                    const progress = ((i + 1) / frames) * 100;
+                    progressValue.style.width = `${progress}%`;
+                }
+                
+                // 生成GIF
+                gif.on('finished', (blob) => {
+                    // 隐藏进度条
+                    progressBar.style.display = 'none';
+                    
+                    // 创建结果URL
+                    const gifUrl = URL.createObjectURL(blob);
+                    
+                    // 显示生成的GIF
+                    addGeneratedMeme(gifUrl);
+                    
+                    showToast('表情包生成成功!');
+                });
+                
+                gif.render();
+            }
+            
+            // 添加生成的表情包
+            function addGeneratedMeme(url) {
+                const memeResult = document.createElement('div');
+                memeResult.className = 'meme-result fade-in';
+                
+                const img = document.createElement('img');
+                img.src = url;
+                img.alt = '生成的表情包';
+                
+                const actions = document.createElement('div');
+                actions.className = 'result-actions';
+                
+                const downloadBtn = document.createElement('div');
+                downloadBtn.className = 'action-btn';
+                downloadBtn.innerHTML = '<i class="fa-solid fa-download"></i>';
+                downloadBtn.addEventListener('click', () => {
+                    downloadMeme(url, '表情包.gif');
+                });
+                
+                const shareBtn = document.createElement('div');
+                shareBtn.className = 'action-btn';
+                shareBtn.innerHTML = '<i class="fa-solid fa-share-alt"></i>';
+                shareBtn.addEventListener('click', () => {
+                    // 这里可以实现分享功能
+                    showToast('分享功能已复制到剪贴板!');
+                });
+                
+                actions.appendChild(downloadBtn);
+                actions.appendChild(shareBtn);
+                memeResult.appendChild(img);
+                memeResult.appendChild(actions);
+                
+                generatedMemes.prepend(memeResult);
+            }
+            
+            // 下载表情包
+            function downloadMeme(url, filename) {
+                const link = document.createElement('a');
+                link.href = url;
+                link.download = filename;
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+            }
+            
+            // 显示提示消息
+            function showToast(message) {
+                toast.textContent = message;
+                toast.classList.add('show');
+                
+                setTimeout(() => {
+                    toast.classList.remove('show');
+                }, 2000);
+            }
+            
+            // 辅助函数：RGB转HEX
+            function rgbToHex(rgb) {
+                // 检查是否已经是HEX格式
+                if (rgb.startsWith('#')) {
+                    return rgb;
+                }
+                
+                // 提取RGB值
+                const rgbArray = rgb.match(/\d+/g);
+                if (!rgbArray || rgbArray.length < 3) {
+                    return '#ffffff'; // 默认返回白色
+                }
+                
+                return '#' + ((1 << 24) + (parseInt(rgbArray[0]) << 16) + (parseInt(rgbArray[1]) << 8) + parseInt(rgbArray[2])).toString(16).slice(1);
+            }
+            
+            // 鼠标移动和释放事件
+            document.addEventListener('mousemove', (e) => {
+                if (isDragging && currentTextLayer) {
+                    const memeRect = memePreview.getBoundingClientRect();
+                    
+                    // 计算新位置（相对于memePreview）
+                    const newX = e.clientX - memeRect.left - offsetX;
+                    const newY = e.clientY - memeRect.top - offsetY;
+                    
+                    // 限制在容器内
+                    const maxX = memeRect.width - currentTextLayer.offsetWidth;
+                    const maxY = memeRect.height - currentTextLayer.offsetHeight;
+                    
+                    currentTextLayer.style.left = `${Math.max(0, Math.min(newX, maxX))}px`;
+                    currentTextLayer.style.top = `${Math.max(0, Math.min(newY, maxY))}px`;
+                }
+            });
+            
+            document.addEventListener('mouseup', () => {
+                if (isDragging) {
+                    isDragging = false;
+                }
+            });
+            
+            // 点击空白处取消选中
+            memePreview.addEventListener('click', (e) => {
+                if (e.target === memePreview || e.target === currentImage) {
+                    deselectAll();
+                }
+            });
+            
+            // 键盘快捷键
+            document.addEventListener('keydown', (e) => {
+                // Ctrl+C 复制
+                if (e.ctrlKey && e.key === 'c') {
+                    e.preventDefault();
+                    if (currentTextLayer) {
+                        const textInput = currentTextLayer.querySelector('.text-input');
+                        navigator.clipboard.writeText(textInput.textContent);
+                        showToast('文字已复制到剪贴板!');
+                    }
+                }
+                
+                // Ctrl+V 粘贴
+                if (e.ctrlKey && e.key === 'v') {
+                    e.preventDefault();
+                    if (currentTextLayer) {
+                        navigator.clipboard.readText().then(text => {
+                            const textInput = currentTextLayer.querySelector('.text-input');
+                            textInput.textContent = text;
+                        });
+                    }
+                }
+                
+                // Delete 删除
+                if (e.key === 'Delete' && currentTextLayer) {
+                    e.preventDefault();
+                    if (confirm('确定要删除这个文字吗？')) {
+                        memePreview.removeChild(currentTextLayer);
+                        textLayers = textLayers.filter(layer => layer !== currentTextLayer);
+                        deselectAll();
+                        showToast('文字已删除!');
+                    }
+                }
+            });
+        });
+    </script>
+</body>
+</html>
+    
